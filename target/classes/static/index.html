@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+
+<h2>Thread Garden 🌿</h2>
+<svg width="1000" height="700"></svg>
+
+<script>
+    const svg = d3.select("svg");
+
+    const simulation = d3.forceSimulation()
+        .force("link", d3.forceLink().id(d => d.id).distance(120))
+        .force("charge", d3.forceManyBody().strength(-300))
+        .force("center", d3.forceCenter(500, 350));
+
+    let nodes = [];
+    let links = [];
+
+    function getColor(state, deadlock) {
+        if (deadlock) return "purple";
+        if (state === "RUNNABLE") return "green";
+        if (state === "BLOCKED") return "red";
+        if (state === "WAITING") return "orange";
+        return "gray";
+    }
+
+    function getSize(cpu) {
+        return Math.max(8, Math.min(30, cpu / 1000000));
+    }
+
+    const socket = new WebSocket("ws://localhost:8080/ws-threads");
+
+    socket.onmessage = function (event) {
+
+        const payload = JSON.parse(event.data);
+        const deadlocks = new Set(payload.deadlocks);
+
+        nodes = payload.threads.map(t => ({
+            id: t.threadId,
+            name: t.name,
+            state: t.state,
+            cpu: t.cpuTime,
+            deadlock: deadlocks.has(t.threadId)
+        }));
+
+        links = payload.threads
+            .filter(t => t.lockOwnerId)
+            .map(t => ({
+                source: t.threadId,
+                target: t.lockOwnerId
+            }));
+
+        updateGraph();
+    };
+
+    function updateGraph() {
+
+        const link = svg.selectAll("line")
+            .data(links, d => d.source + "-" + d.target);
+
+        link.exit().remove();
+
+        const linkEnter = link.enter()
+            .append("line")
+            .style("stroke", "#aaa");
+
+        const allLinks = linkEnter.merge(link);
+
+        const node = svg.selectAll("circle")
+            .data(nodes, d => d.id);
+
+        node.exit().remove();
+
+        const nodeEnter = node.enter()
+            .append("circle")
+            .attr("r", d => getSize(d.cpu))
+            .attr("fill", d => getColor(d.state, d.deadlock))
+            .call(d3.drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended)
+            );
+
+        nodeEnter.append("title")
+            .text(d => `${d.name} (${d.state})`);
+
+        const allNodes = nodeEnter.merge(node);
+
+        simulation.nodes(nodes).on("tick", () => {
+
+            allLinks
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
+
+            allNodes
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y);
+        });
+
+        simulation.force("link").links(links);
+        simulation.alpha(0.3).restart();
+    }
+
+    function dragstarted(event, d) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+    }
+
+    function dragged(event, d) {
+        d.fx = event.x;
+        d.fy = event.y;
+    }
+
+    function dragended(event, d) {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+    }
+</script>
+
+</body>
+</html>

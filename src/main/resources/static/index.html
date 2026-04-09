@@ -7,6 +7,19 @@
 <body>
 
 <h2>Thread Garden 🌿</h2>
+
+<!-- Tooltip -->
+<div id="tooltip" style="
+    position: absolute;
+    background: black;
+    color: white;
+    padding: 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    display: none;
+    pointer-events: none;
+"></div>
+
 <svg width="1000" height="700"></svg>
 
 <script>
@@ -30,6 +43,31 @@
 
     function getSize(cpu) {
         return Math.max(8, Math.min(30, cpu / 1000000));
+    }
+
+    // Tooltip functions
+    const tooltip = d3.select("#tooltip");
+
+    function showTooltip(event, d) {
+        tooltip
+            .style("display", "block")
+            .html(`
+                <b>${d.name}</b><br/>
+                State: ${d.state}<br/>
+                CPU: ${(d.cpu / 1000000).toFixed(2)} ms
+            `)
+            .style("left", (event.pageX + 10) + "px")
+            .style("top", (event.pageY + 10) + "px");
+    }
+
+    function moveTooltip(event) {
+        tooltip
+            .style("left", (event.pageX + 10) + "px")
+            .style("top", (event.pageY + 10) + "px");
+    }
+
+    function hideTooltip() {
+        tooltip.style("display", "none");
     }
 
     const socket = new WebSocket("ws://localhost:8080/ws-threads");
@@ -59,6 +97,7 @@
 
     function updateGraph() {
 
+        // LINKS
         const link = svg.selectAll("line")
             .data(links, d => d.source + "-" + d.target);
 
@@ -70,6 +109,7 @@
 
         const allLinks = linkEnter.merge(link);
 
+        // NODES
         const node = svg.selectAll("circle")
             .data(nodes, d => d.id);
 
@@ -79,17 +119,25 @@
             .append("circle")
             .attr("r", d => getSize(d.cpu))
             .attr("fill", d => getColor(d.state, d.deadlock))
+            .on("mouseover", function(event, d) {
+                d3.select(this).attr("stroke", "yellow").attr("stroke-width", 3);
+                showTooltip(event, d);
+            })
+            .on("mousemove", moveTooltip)
+            .on("mouseout", function() {
+                d3.select(this).attr("stroke", "none");
+                hideTooltip();
+            })
+            .on("click", showTooltip)
             .call(d3.drag()
                 .on("start", dragstarted)
                 .on("drag", dragged)
                 .on("end", dragended)
             );
 
-        nodeEnter.append("title")
-            .text(d => `${d.name} (${d.state})`);
-
         const allNodes = nodeEnter.merge(node);
 
+        // SIMULATION
         simulation.nodes(nodes).on("tick", () => {
 
             allLinks
@@ -100,7 +148,8 @@
 
             allNodes
                 .attr("cx", d => d.x)
-                .attr("cy", d => d.y);
+                .attr("cy", d => d.y)
+                .attr("fill", d => getColor(d.state, d.deadlock));
         });
 
         simulation.force("link").links(links);

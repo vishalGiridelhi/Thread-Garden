@@ -24,7 +24,6 @@ public class ThreadWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
-        System.out.println("🔥 CONNECTED: " + session.getId());
         sessions.add(session);
     }
 

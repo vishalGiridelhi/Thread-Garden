@@ -42,7 +42,7 @@ public class ThreadMonitorService {
             ));
         }
 
-        // 🔥 DEMO EDGE FIX (so graph is not empty)
+        //todo - will remove
         if (!result.isEmpty()) {
             long mainThreadId = result.get(0).getThreadId();
 
